@@ -20,6 +20,7 @@ from judicator.api.summonerAPI import SummonerAPI
 from pymongo import MongoClient
 
 import random
+from datetime import datetime
 
 from requests.exceptions import HTTPError
 
@@ -47,10 +48,13 @@ class BaseCrawler:
 		# Initialize empty set information
 		self.registered_matches = set()
 		self.registered_summoners = set()
+		self.summoner_accounts = set()
 		self.queued_matches = set()
 
 		self.queues = set([420])
 		self.seasons = set([13])
+		self.beginning_time = datetime(2020, 3, 19)
+		self.ending_time = datetime(2020, 3, 26)
 
 	def crawl(self, match_count: int=1, seed: str=None):
 		"""
@@ -114,6 +118,7 @@ class BaseCrawler:
 		result = self.judicator_summoner.find({}, {'_id' : 0})
 		for doc in result:
 			self.registered_summoners.add(doc['puuid'])
+			self.summoner_accounts.add(doc['accountId'])
 
 	def process_account_id(self, account_id: str) -> None:
 		"""
@@ -125,7 +130,7 @@ class BaseCrawler:
 				account_id: string representing a summoners account id
 		"""
 		# get entire match history
-		match_list_obj = self.match_conn.get_matchlist_by_accountid(account_id, queues=self.queues, seasons=self.seasons, exhaust=True)
+		match_list_obj = self.match_conn.get_matchlist_by_accountid(account_id, end_time=self.ending_time, begin_time=self.beginning_time, queues=self.queues, seasons=self.seasons)
 		match_list = match_list_obj.matches()
 
 		# add matches to queue that are unencountered
@@ -151,6 +156,9 @@ class BaseCrawler:
 			self.judicator_match_queue.delete_one({'gameId' : match.game_id()})
 
 		for account_id in participants:
+			# skip accounts already encountered, waste of calls
+			if account_id in self.summoner_accounts:
+				continue
 			try:
 				summoner = self.summoner_conn.get_summoner_by_account_id(account_id)
 			except HTTPError as e:
@@ -167,4 +175,4 @@ class BaseCrawler:
 
 if __name__ == '__main__':
 	crawler = BaseCrawler()
-	crawler.crawl()
+	crawler.crawl(match_count=None, seed='A Legendary Crab')
